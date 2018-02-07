@@ -149,7 +149,16 @@ static void stiefel_Gs3(double *restrict Gs, double beta, double X) {
 /************************************
  * Keplerian motion for one planet  */
 void reb_whfast_kepler_solver(const struct reb_simulation* const r, struct reb_particle* const restrict p_j, const double M, unsigned int i, double _dt){
-    const struct reb_particle p1 = p_j[i];
+    int flipped = 0;
+    if (_dt<0.){
+        flipped = 1;
+        _dt *= -1;
+        p_j[i].vx *= -1;
+        p_j[i].vy *= -1;
+        p_j[i].vz *= -1;
+    }
+    
+    struct reb_particle p1 = p_j[i];
 
     const double r0 = sqrt(p1.x*p1.x + p1.y*p1.y + p1.z*p1.z);
     const double r0i = 1./r0;
@@ -289,6 +298,7 @@ void reb_whfast_kepler_solver(const struct reb_simulation* const r, struct reb_p
     double g = _dt - M*Gs[3];
     double fd = -M*Gs[1]*r0i*ri; 
     double gd = -M*Gs[2]*ri; 
+
         
     p_j[i].x += f*p1.x + g*p1.vx;
     p_j[i].y += f*p1.y + g*p1.vy;
@@ -297,6 +307,12 @@ void reb_whfast_kepler_solver(const struct reb_simulation* const r, struct reb_p
     p_j[i].vx += fd*p1.x + gd*p1.vx;
     p_j[i].vy += fd*p1.y + gd*p1.vy;
     p_j[i].vz += fd*p1.z + gd*p1.vz;
+    
+    if (flipped==1){
+        p_j[i].vx *= -1;
+        p_j[i].vy *= -1;
+        p_j[i].vz *= -1;
+    }
 
     //Variations
     for (int v=0;v<r->var_config_N;v++){

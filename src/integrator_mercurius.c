@@ -125,12 +125,15 @@ static void reb_mercurius_encounterstep(struct reb_simulation* const r, const do
     
     r->dt = 0.0001*_dt; // start with a small timestep.
     
-    while(r->t < t_needed && fabs(r->dt/old_dt)>1e-14 ){
+    while( ((r->dt>0.)?(r->t < t_needed):(r->t > t_needed))  && fabs(r->dt/old_dt)>1e-14 ){
         reb_update_acceleration(r);
         reb_integrator_ias15_part2(r);
 
         reb_collision_search(r);
-        if (r->t+r->dt >  t_needed){
+        if (r->dt>0. && (r->t+r->dt >  t_needed)){
+            r->dt = t_needed-r->t;
+        }
+        if (r->dt<0. && (r->t+r->dt <  t_needed)){
             r->dt = t_needed-r->t;
         }
     }
@@ -172,7 +175,8 @@ static void reb_mercurius_predict_encounters(struct reb_simulation* const r){
     const double* const rhill = rim->rhill;
     const int N = r->N;
     const int N_active = r->N_active==-1?r->N:r->N_active;
-    const double dt = r->dt;
+    const double dt = fabs(r->dt);
+    const double dtsign = (r->dt>0.)?1.:-1;
     rim->encounterN = 0;
     for (int i=0; i<N; i++){
         rim->encounterIndicies[i] = 0;
@@ -182,16 +186,16 @@ static void reb_mercurius_predict_encounters(struct reb_simulation* const r){
             const double dxn = p_hn[i].x - p_hn[j].x;
             const double dyn = p_hn[i].y - p_hn[j].y;
             const double dzn = p_hn[i].z - p_hn[j].z;
-            const double dvxn = p_hn[i].vx - p_hn[j].vx;
-            const double dvyn = p_hn[i].vy - p_hn[j].vy;
-            const double dvzn = p_hn[i].vz - p_hn[j].vz;
+            const double dvxn = dtsign*(p_hn[i].vx - p_hn[j].vx);
+            const double dvyn = dtsign*(p_hn[i].vy - p_hn[j].vy);
+            const double dvzn = dtsign*(p_hn[i].vz - p_hn[j].vz);
             const double rn = (dxn*dxn + dyn*dyn + dzn*dzn);
             const double dxo = p_ho[i].x - p_ho[j].x;
             const double dyo = p_ho[i].y - p_ho[j].y;
             const double dzo = p_ho[i].z - p_ho[j].z;
-            const double dvxo = p_ho[i].vx - p_ho[j].vx;
-            const double dvyo = p_ho[i].vy - p_ho[j].vy;
-            const double dvzo = p_ho[i].vz - p_ho[j].vz;
+            const double dvxo = dtsign*(p_ho[i].vx - p_ho[j].vx);
+            const double dvyo = dtsign*(p_ho[i].vy - p_ho[j].vy);
+            const double dvzo = dtsign*(p_ho[i].vz - p_ho[j].vz);
             const double ro = (dxo*dxo + dyo*dyo + dzo*dzo);
 
             const double drndt = (dxn*dvxn+dyn*dvyn+dzn*dvzn)*2.;
@@ -306,9 +310,9 @@ void reb_integrator_mercurius_part1(struct reb_simulation* r){
             const double vc = sqrt(GM/fabs(a));
             double rhill = 0;
             // Criteria 1: average velocity
-            rhill = MAX(rhill, vc*0.4*r->dt);
+            rhill = MAX(rhill, vc*0.4*fabs(r->dt));
             // Criteria 2: current velocity
-            rhill = MAX(rhill, sqrt(v2)*0.4*r->dt);
+            rhill = MAX(rhill, sqrt(v2)*0.4*fabs(r->dt));
             // Criteria 3: Hill radius
             rhill = MAX(rhill, rim->rcrit*a*pow(r->particles[i].m/(3.*r->particles[0].m),1./3.));
             // Criteria 4: physical radius
