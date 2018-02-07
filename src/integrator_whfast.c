@@ -176,7 +176,7 @@ void reb_whfast_kepler_solver(const struct reb_simulation* const r, struct reb_p
         const double sqrt_beta = sqrt(beta);
         invperiod = sqrt_beta*beta/(2.*M_PI*M);
         X_per_period = 2.*M_PI/sqrt_beta;
-        if (fabs(_dt)*invperiod>1. && r->ri_whfast.timestep_warning == 0){
+        if (_dt*invperiod>1. && r->ri_whfast.timestep_warning == 0){
             // Ignoring const qualifiers. This warning should not have any effect on
             // other parts of the code, nor is it vital to show it.
             ((struct reb_simulation* const)r)->ri_whfast.timestep_warning++;
@@ -265,11 +265,6 @@ void reb_whfast_kepler_solver(const struct reb_simulation* const r, struct reb_p
             // r_min = pericenter
             X_min = _dt/(fastabs(vq*_dt)+r0); 
             X_max = _dt/q;
-            if (_dt<0.){
-                double temp = X_min;
-                X_min = X_max;
-                X_max = temp;
-            }
         }
         X = (X_max + X_min)/2.;
         do{
