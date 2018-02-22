@@ -88,11 +88,40 @@ int main(int argc, char* argv[]){
     double dfact = 0.00001, vfact = 0.0001;
     double interval = 365.25 / 30.0; // 1 year per second, 30 FPS
     int doGrab = 0;
-    int i;
+    int i, numParticles = 1000;
+    int randomize = 0;
+    double duration = 365.25 * 200.;
 
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-grab") == 0) {
             doGrab = 1;
+        }
+        else if (strcmp(argv[i], "-randomize") == 0) {
+            randomize = 1;
+        }
+        else if (strcmp(argv[i], "-duration") == 0) {
+            if (i < (argc - 1)) {
+                duration = atof(argv[i+1]) * 365.25;
+                i += 1;
+            }
+        }
+        else if (strcmp(argv[i], "-n") == 0) {
+            if (i < (argc - 1)) {
+                numParticles = atoi(argv[i+1]);
+                i += 1;
+            }
+        }
+        else if (strcmp(argv[i], "-dfact") == 0) {
+            if (i < (argc - 1)) {
+                dfact = atof(argv[i+1]);
+                i += 1;
+            }
+        }
+        else if (strcmp(argv[i], "-vfact") == 0) {
+            if (i < (argc - 1)) {
+                vfact = atof(argv[i+1]);
+                i += 1;
+            }
         }
     }
     if (!doGrab) {
@@ -101,7 +130,7 @@ int main(int argc, char* argv[]){
 
     // Setup constants
     r->dt = 1;                   // in days
-    tmax = 73050 + interval*0.5; // 200 years plus slop
+    tmax = duration + interval*0.5; // 200 years plus slop
     r->G = 1;                    // All other units corrected to this standard
     r->N_active = 10;            // All other particles are test particles
     r->usleep = 2000000. / interval; // It takes 1.8 seconds to dump a grab
@@ -128,7 +157,9 @@ int main(int argc, char* argv[]){
         reb_add(r, p); 
     }
 
-    //srandomdev();
+    if (randomize) {
+        srandomdev();
+    }
 
     /* Get Earth-relative position and velocity */
     tes_earth_pos[0] = tesla_pos[0] - ss_pos[3][0];
@@ -152,7 +183,7 @@ printf("dist = %g\n", dist);
 printf("speed = %g\n", speed);
 
     // Test particles
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < numParticles; i++) {
         struct reb_particle p = {0};
         double vec[3], fact;
 
