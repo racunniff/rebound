@@ -717,6 +717,7 @@ struct reb_simulation {
     int start_paused;               /// Set to 1 to start with simulation paused
     const char *screenDumpPath;     /// Screen dump path - used with sprintf
     double screenDumpInterval;      /// Time interval between screen dumps
+    void (*formatTime)(char *str, int n, double t); // Optional time formatting
 
     int     exact_finish_time;      ///< Set to 1 to finish the integration exactly at tmax. Set to 0 to finish at the next dt. Default is 1. 
 

@@ -656,17 +656,12 @@ static void reb_display(GLFWwindow* window){
         if (data->r_copy->integrator==REB_INTEGRATOR_SEI){
             sprintf(str, "t = %f [orb]  ", data->r_copy->t*data->r_copy->ri_sei.OMEGA/2./M_PI);
         }else{
-#if 0
-            sprintf(str, "t = %f  ", data->r_copy->t);
-#else
-            int year, month;
-            double t;
-
-            t = data->r_copy->t + 41.; // Feb 10
-            year = (int)(2018.0 + t / 365.25); //... 2018
-            month = 1 + ((int)(t / 30.4375) % 12);
-            sprintf(str, "%02d %04d", month, year);
-#endif
+            if (data->r->formatTime) {
+                (*data->r->formatTime)(str, 256, data->r_copy->t);
+            }
+            else {
+                sprintf(str, "t = %f  ", data->r_copy->t);
+            }
         }
         j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);

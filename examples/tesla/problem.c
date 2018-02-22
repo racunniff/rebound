@@ -78,6 +78,7 @@ double tmax;
 double ranf(void);
 double randGauss(void);
 void ranVec(double vec[3]);
+void formatTime(char *str, int n, double t);
 
 int main(int argc, char* argv[]){
     struct reb_simulation* r = reb_create_simulation();
@@ -115,6 +116,7 @@ int main(int argc, char* argv[]){
         r->screenDumpInterval = interval;
         r->screenDumpPath = "GRABS/tesla%05d.png";
     }
+    r->formatTime = formatTime;
 
     // Initial conditions
     for (int i = 0; i < 10; i++ ){
@@ -249,3 +251,12 @@ double randGauss(void)
     }
 }
 
+void formatTime(char *str, int n, double t)
+{
+        int year, month;
+
+        t += 41.; // Feb 10
+        year = (int)(2018.0 + t / 365.25); //... 2018
+        month = 1 + ((int)(t / 30.4375) % 12);
+        sprintf(str, "%02d %04d", month, year);
+}
