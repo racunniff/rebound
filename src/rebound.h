@@ -714,6 +714,10 @@ struct reb_simulation {
     int     tree_needs_update;      ///< Flag to force a tree update (after boundary check)
     double opening_angle2;          ///< Square of the cell opening angle \f$ \theta \f$. 
     enum REB_STATUS status;         ///< Set to 1 to exit the simulation at the end of the next timestep. 
+    int start_paused;               /// Set to 1 to start with simulation paused
+    const char *screenDumpPath;     /// Screen dump path - used with sprintf
+    double screenDumpInterval;      /// Time interval between screen dumps
+
     int     exact_finish_time;      ///< Set to 1 to finish the integration exactly at tmax. Set to 0 to finish at the next dt. Default is 1. 
 
     unsigned int force_is_velocity_dependent;   ///< Set to 1 if integrator needs to consider velocity dependent forces.  
@@ -1887,6 +1891,7 @@ struct reb_display_data {
     unsigned int box_shader_color_location;
     unsigned int point_shader_mvp_location;
     unsigned int point_shader_color_location;
+    unsigned int point_shader_color0_location;
     unsigned int point_shader_program;
     unsigned int point_shader_particle_vao;
     unsigned int sphere_shader_mvp_location;

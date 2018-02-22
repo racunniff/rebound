@@ -33,6 +33,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <png.h>
+#include <setjmp.h>
 #include "rebound.h"
 #include "display.h"
 #include "tools.h"
@@ -396,6 +398,99 @@ static void reb_display_keyboard(GLFWwindow* window, int key, int scancode, int 
     }
 }
 
+static void pngWriteData(png_structp png_ptr, png_bytep data, png_size_t len)
+{
+    FILE *f;
+
+    f = png_get_io_ptr(png_ptr);
+    if (!f) {
+        png_error(png_ptr, "pngWriteData - NULL io_ptr");
+    }
+    if (fwrite(data, len, 1, f) != 1) {
+        png_error(png_ptr, "pngWriteData - write error");
+    }
+}
+
+static void pngFlushData(png_structp png_ptr)
+{
+    /* Nothing to do */
+}
+
+static void doScreenDump(GLFWwindow *window)
+{
+    static double prevDumpTime = -1e38;
+    double curr_t, delta_t, interval;
+    char path[1024];
+    int i, w, h;
+    unsigned char *img = NULL;
+    struct reb_display_data *data = glfwGetWindowUserPointer(window);
+    FILE *f = NULL;
+    png_structp png_ptr = NULL;
+    png_infop info_ptr = NULL;
+    png_bytep *rows = NULL;
+    static int sequence = 0;
+
+    if (data->r->status != REB_RUNNING) return;
+    if (!data->r->screenDumpPath) return;
+
+    curr_t = data->r_copy->t;
+    delta_t = curr_t - prevDumpTime;
+    interval = data->r->screenDumpInterval;
+
+    if (delta_t < interval) return;
+    prevDumpTime = curr_t;
+
+    // Pause the simulation while we take a screen dump
+    data->r->status = REB_RUNNING_PAUSED;
+
+    sprintf(path, data->r->screenDumpPath, sequence);
+    sequence++;
+
+    f = fopen(path, "wb+");
+    if (!f) goto done;
+
+    glfwGetFramebufferSize(window, &w, &h);
+    img = malloc(w*h*3);
+    rows = malloc(h*sizeof(png_bytep));
+    if (!(img && rows)) goto done;
+    for (i = 1; i <= h; i++) {
+        rows[i-1] = img + w*h*3 - i*3*w;
+    }
+
+    png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png_ptr) goto done;
+
+    info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) goto done;
+
+    if (setjmp(png_jmpbuf(png_ptr))) goto done;
+
+    png_set_write_fn(png_ptr, f, pngWriteData, pngFlushData);
+
+    png_set_IHDR(png_ptr, info_ptr, w, h, 8, PNG_COLOR_TYPE_RGB,
+                 PNG_INTERLACE_NONE, PNG_COMPRESSION_TYPE_BASE,
+                 PNG_FILTER_TYPE_BASE);
+
+    png_write_info(png_ptr, info_ptr);
+    png_set_packing(png_ptr);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, img);
+
+    png_write_image(png_ptr, rows);
+    png_write_end(png_ptr, NULL);
+
+done :
+    if (f) fclose(f);
+    if (img) free(img);
+    if (rows) free(rows);
+    if (png_ptr) png_destroy_write_struct(&png_ptr, &info_ptr);
+
+    // Resume the simulation
+    data->r->status = REB_RUNNING;
+}
+
 static void reb_display(GLFWwindow* window){
     struct reb_display_data* data = glfwGetWindowUserPointer(window);
     if (!data){
@@ -441,6 +536,16 @@ static void reb_display(GLFWwindow* window){
             mattranslate(tmp2,gb.shiftx,gb.shifty,gb.shiftz);
             matmult(view,tmp2,tmp1);
             matmult(projection,tmp1,tmp2);
+
+            if (data->wire){
+                // Orbits
+                glUseProgram(data->orbit_shader_program);
+                glBindVertexArray(data->orbit_shader_particle_vao);
+                glUniformMatrix4fv(data->orbit_shader_mvp_location, 1, GL_TRUE, (GLfloat*) tmp2);
+                glDrawArraysInstanced(GL_LINE_STRIP, 0, data->orbit_shader_vertex_count, data->r_copy->N-1);
+                glBindVertexArray(0);
+            }
+
             if(data->spheres>0){
                 // Solid Spheres
                 glEnable(GL_DEPTH_TEST);
@@ -457,16 +562,9 @@ static void reb_display(GLFWwindow* window){
                 glUseProgram(data->point_shader_program);
                 glBindVertexArray(data->point_shader_particle_vao);
                 glUniform4f(data->point_shader_color_location, 1.,1.,0.,0.8);
+                glUniform4f(data->point_shader_color0_location, 1.,0.,0.,0.8);
                 glUniformMatrix4fv(data->point_shader_mvp_location, 1, GL_TRUE, (GLfloat*) tmp2);
                 glDrawArrays(GL_POINTS, 0, data->r_copy->N);
-                glBindVertexArray(0);
-            }
-            if (data->wire){
-                // Orbits
-                glUseProgram(data->orbit_shader_program);
-                glBindVertexArray(data->orbit_shader_particle_vao);
-                glUniformMatrix4fv(data->orbit_shader_mvp_location, 1, GL_TRUE, (GLfloat*) tmp2);
-                glDrawArraysInstanced(GL_LINE_STRIP, 0, data->orbit_shader_vertex_count, data->r_copy->N-1);
                 glBindVertexArray(0);
             }
         }
@@ -502,12 +600,13 @@ static void reb_display(GLFWwindow* window){
             int j = convertLine(reb_logo[i],val);
             glUniform1f(data->simplefont_shader_ypos_location, (float)i);
             glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+            //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
         }
         
         char str[256];
         int ypos = 0;
-        glUniform2f(data->simplefont_shader_pos_location, -0.70,-269./350.);
+        //glUniform2f(data->simplefont_shader_pos_location, -0.70,-269./350.);
+        glUniform2f(data->simplefont_shader_pos_location, -1.00,-269./350.);
         glUniform1f(data->simplefont_shader_aspect_location, 1.4545);
         glUniform1f(data->simplefont_shader_scale_location, 16./350.);
         
@@ -515,7 +614,7 @@ static void reb_display(GLFWwindow* window){
         sprintf(str,"REBOUND v%s",reb_version_str);
         int j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
         
         if (data->r_copy->status == REB_RUNNING){
             sprintf(str, "Simulation is running  ");
@@ -525,25 +624,35 @@ static void reb_display(GLFWwindow* window){
         glUniform1f(data->simplefont_shader_ypos_location, ypos++);
         j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
         
         sprintf(str, "Press h for help ");
         glUniform1f(data->simplefont_shader_ypos_location, ypos++);
         j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
         
         sprintf(str, "N = %d ",data->r_copy->N);
         glUniform1f(data->simplefont_shader_ypos_location, ypos++);
         j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-        glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
         
         glUniform1f(data->simplefont_shader_ypos_location, ypos++);
         if (data->r_copy->integrator==REB_INTEGRATOR_SEI){
             sprintf(str, "t = %f [orb]  ", data->r_copy->t*data->r_copy->ri_sei.OMEGA/2./M_PI);
         }else{
+#if 0
             sprintf(str, "t = %f  ", data->r_copy->t);
+#else
+            int year, month;
+            double t;
+
+            t = data->r_copy->t + 41.; // Feb 10
+            year = (int)(2018.0 + t / 365.25); //... 2018
+            month = 1 + ((int)(t / 30.4375) % 12);
+            sprintf(str, "%02d %04d", month, year);
+#endif
         }
         j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
@@ -570,6 +679,8 @@ static void reb_display(GLFWwindow* window){
         }
     }
 
+    doScreenDump(window);
+
     glfwSwapBuffers(window);
     return;
 }
@@ -590,7 +701,11 @@ void reb_display_init(struct reb_simulation * const r){
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, 1);
 
+#if 0
     GLFWwindow*  window = glfwCreateWindow(700, 700, "rebound", NULL, NULL);
+#else
+    GLFWwindow*  window = glfwCreateWindow(1920, 1080, "rebound", NULL, NULL);
+#endif
     if (!window){
         reb_error(r,"GLFW window creation failed.");
         return;
@@ -694,12 +809,19 @@ void reb_display_init(struct reb_simulation * const r){
         const char* vertex_shader =
             "#version 330\n"
             "in vec3 vp;\n"
+            "in float rad;\n"
             "uniform mat4 mvp;\n"
             "uniform vec4 vc;\n"
+            "uniform vec4 vc0;\n"
             "out vec4 color;\n"
             "void main() {\n"
             "  gl_Position = mvp*vec4(vp, 1.0);\n"
-            "  color = vc;\n"
+            "  if (rad == 0.0) {\n"
+            "      color = vc0;\n"
+            "  }\n"
+            "  else {\n"
+            "      color = vc;\n"
+            "  }\n"
             "}\n";
         const char* fragment_shader =
             "#version 330\n"
@@ -721,6 +843,7 @@ void reb_display_init(struct reb_simulation * const r){
         data->point_shader_program = loadShader(vertex_shader, fragment_shader);
         data->point_shader_mvp_location = glGetUniformLocation(data->point_shader_program, "mvp");
         data->point_shader_color_location = glGetUniformLocation(data->point_shader_program, "vc");
+        data->point_shader_color0_location = glGetUniformLocation(data->point_shader_program, "vc0");
     }
 
     {
@@ -781,6 +904,7 @@ void reb_display_init(struct reb_simulation * const r){
             "in vec3 omegaOmegainc;\n"
             "in float lintwopi;\n"
             "out float lin;\n"
+            "out float alpha;\n"
             "uniform mat4 mvp;\n"
             "const float M_PI = 3.14159265359;\n"
             "void main() {\n"
@@ -807,13 +931,20 @@ void reb_display_init(struct reb_simulation * const r){
             "   float si = sin(inc);\n"
             "   vec3 pos = vec3(r*(cO*(co*cf-so*sf) - sO*(so*cf+co*sf)*ci),r*(sO*(co*cf-so*sf) + cO*(so*cf+co*sf)*ci),+ r*(so*cf+co*sf)*si);\n"
             "    gl_Position = mvp*(vec4(focus+pos, 1.0));\n"
+            "    if (gl_InstanceID == 3) {\n"
+            "        alpha = 0.0;\n"
+            "    }\n"
+            "    else {\n"
+            "        alpha = 1.0;\n"
+            "    }\n"
             "}\n";
         const char* fragment_shader =
             "#version 330\n"
             "out vec4 outcolor;\n"
             "in float lin;\n"
+            "in float alpha;\n"
             "void main() {\n"
-            "  outcolor = vec4(1.,1.,1.,sqrt(lin));\n"
+            "  outcolor = vec4(1.,1.,1.,alpha*sqrt(lin));\n"
             "}\n";
 
         data->orbit_shader_program = loadShader(vertex_shader, fragment_shader);
@@ -876,12 +1007,15 @@ void reb_display_init(struct reb_simulation * const r){
     glBindVertexArray(data->point_shader_particle_vao);
     GLuint pvp = glGetAttribLocation(data->point_shader_program,"vp");
     glEnableVertexAttribArray(pvp);
+    GLuint prad = glGetAttribLocation(data->point_shader_program,"rad");
+    glEnableVertexAttribArray(prad);
 
     GLuint particle_buffer;
     glGenBuffers(1, &particle_buffer);
     glBindBuffer(GL_ARRAY_BUFFER, particle_buffer);
     
     glVertexAttribPointer(pvp, 3, GL_FLOAT, GL_FALSE, sizeof(float)*7, NULL);
+    glVertexAttribPointer(prad, 1, GL_FLOAT, GL_FALSE, sizeof(float)*7, (void *)offsetof(struct reb_particle_opengl, r));
     glBindVertexArray(0);
     
     // Create cross mesh
