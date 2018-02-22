@@ -377,7 +377,7 @@ static void reb_display_keyboard(GLFWwindow* window, int key, int scancode, int 
                 data->wire = !data->wire;
                 break;
             case 'T':
-                data->onscreentext = !data->onscreentext;
+                data->onscreentext = (data->onscreentext + 1) % 3;
                 break;
             case 'C':
                 data->clear = !data->clear;
@@ -600,13 +600,19 @@ static void reb_display(GLFWwindow* window){
             int j = convertLine(reb_logo[i],val);
             glUniform1f(data->simplefont_shader_ypos_location, (float)i);
             glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-            //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+            if (data->onscreentext == 1) {
+                glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+            }
         }
         
         char str[256];
         int ypos = 0;
-        //glUniform2f(data->simplefont_shader_pos_location, -0.70,-269./350.);
-        glUniform2f(data->simplefont_shader_pos_location, -1.00,-269./350.);
+        if (data->onscreentext == 1) {
+            glUniform2f(data->simplefont_shader_pos_location, -0.70,-269./350.);
+        }
+        else {
+            glUniform2f(data->simplefont_shader_pos_location, -1.00,-269./350.);
+        }
         glUniform1f(data->simplefont_shader_aspect_location, 1.4545);
         glUniform1f(data->simplefont_shader_scale_location, 16./350.);
         
@@ -614,7 +620,9 @@ static void reb_display(GLFWwindow* window){
         sprintf(str,"REBOUND v%s",reb_version_str);
         int j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        if (data->onscreentext == 1) {
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        }
         
         if (data->r_copy->status == REB_RUNNING){
             sprintf(str, "Simulation is running  ");
@@ -624,19 +632,25 @@ static void reb_display(GLFWwindow* window){
         glUniform1f(data->simplefont_shader_ypos_location, ypos++);
         j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        if (data->onscreentext == 1) {
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        }
         
         sprintf(str, "Press h for help ");
         glUniform1f(data->simplefont_shader_ypos_location, ypos++);
         j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        if (data->onscreentext == 1) {
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        }
         
         sprintf(str, "N = %d ",data->r_copy->N);
         glUniform1f(data->simplefont_shader_ypos_location, ypos++);
         j = convertLine(str,val);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(val), val);
-        //glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        if (data->onscreentext == 1) {
+            glDrawArraysInstanced(GL_TRIANGLE_STRIP, 0, 4, j);
+        }
         
         glUniform1f(data->simplefont_shader_ypos_location, ypos++);
         if (data->r_copy->integrator==REB_INTEGRATOR_SEI){

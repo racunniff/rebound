@@ -6,6 +6,7 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <math.h>
 #include "rebound.h"
@@ -85,6 +86,17 @@ int main(int argc, char* argv[]){
     double dist, speed;
     double dfact = 0.00001, vfact = 0.0001;
     double interval = 365.25 / 30.0; // 1 year per second, 30 FPS
+    int doGrab = 0;
+    int i;
+
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-grab") == 0) {
+            doGrab = 1;
+        }
+    }
+    if (!doGrab) {
+        interval = 0.0;
+    }
 
     // Setup constants
     r->dt = 1;                   // in days
@@ -98,9 +110,11 @@ int main(int argc, char* argv[]){
     r->heartbeat = heartbeat;
     r->exact_finish_time = 1; // Finish exactly at tmax in reb_integrate(). Default is already 1.
     //r->integrator        = REB_INTEGRATOR_IAS15;        // Alternative non-symplectic integrator
-    r->start_paused = 1;
-    r->screenDumpInterval = interval;
-    r->screenDumpPath = "GRABS/tesla%05d.png";
+    if (doGrab) {
+        r->start_paused = 1;
+        r->screenDumpInterval = interval;
+        r->screenDumpPath = "GRABS/tesla%05d.png";
+    }
 
     // Initial conditions
     for (int i = 0; i < 10; i++ ){
